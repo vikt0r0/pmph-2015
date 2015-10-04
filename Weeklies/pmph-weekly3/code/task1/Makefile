@@ -1,12 +1,12 @@
 CC=gcc
-CFLAGS=-c -Wall
+CFLAGS=-c -Wall -fopenmp
 LDFLAGS=
 
 BINDIR=./bin
 
-EXECUTABLE=$(BINDIR)/matrix_transpose_seq
+EXECUTABLE=$(BINDIR)/matrix
 
-SOURCES=matrix_transpose_seq.c
+SOURCES=matrix.cu
 OBJECTS=$(SOURCES:.c=.o)
 
 all: $(SOURCES) $(EXECUTABLE)
@@ -14,7 +14,7 @@ all: $(SOURCES) $(EXECUTABLE)
 $(EXECUTABLE): $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
 
-.c.o:
+.cu.o:
 	$(CC) $(CFLAGS) $< -o $@
 
 run:
