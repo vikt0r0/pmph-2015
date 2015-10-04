@@ -1,2 +1,7 @@
 .DS\_Store
 *.sw?
+*.aux
+*.log
+*.out
+*.synctex.gz
+_minted-*/
