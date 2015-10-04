@@ -3,8 +3,8 @@
 #include <math.h>
 
 #ifdef __CUDACC__
+#include "matrix_kernels.cu.h"
 #include <cuda_runtime.h>
-#include <matrix_kernels.cu.h>
 #endif
 
 #include "matrix.cu.h"

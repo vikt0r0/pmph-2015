@@ -1,4 +1,4 @@
-CC=gcc
+CC=nvcc
 CFLAGS=-c -Wall -fopenmp
 LDFLAGS=
 

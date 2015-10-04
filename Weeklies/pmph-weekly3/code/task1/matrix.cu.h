@@ -3,7 +3,7 @@
 
 #define MATRIX_EQUALITY_EPSILON 0.00005
 
-template <typename T>
+template <class T>
 struct matrix_t {
   int height;
   int width;
