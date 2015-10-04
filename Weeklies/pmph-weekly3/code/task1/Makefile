@@ -21,4 +21,4 @@ run:
 	$(EXECUTABLE)
 
 clean:
-	rm $(EXECUTABLE) $(OBJECTS)
+	rm $(EXECUTABLE) *.o
