@@ -21,12 +21,29 @@ void matrix_set_element(matrix_t<T> mat, int i, int j, T value) {
 
 template <typename T>
 T matrix_get_element(matrix_t<T> mat, int i, int j) {
-  return mat[i*mat.width+j];
+  return mat.elements[i*mat.width+j];
 }
 
 template <typename T>
 bool matrix_is_equal(matrix_t<T> a, matrix_t<T> b) {
-  if (a.width != b.width || a.length != b.length)
+  if (a.width != b.width || a.height != b.height)
+    return false;
+
+  bool equal = true;
+
+  for (int i = 0; i < a.height; ++i) {
+    for (int j = 0; j < a.width; ++j) {
+      if (matrix_get_element(a,i,j) != matrix_get_element(b,i,j)) {
+        equal = false;
+        break;
+      }
+    }
+  }
+  return equal;
+}
+
+bool matrix_is_equal(matrix_t<float> a, matrix_t<float> b) {
+  if (a.width != b.width || a.height != b.height)
     return false;
 
   bool equal = true;
@@ -39,7 +56,6 @@ bool matrix_is_equal(matrix_t<T> a, matrix_t<T> b) {
       }
     }
   }
-
   return equal;
 }
 
@@ -72,16 +88,31 @@ void matrix_transpose_omp(matrix_t<T> out, matrix_t<T> in) {
 }
 
 template <typename T>
-void matrix_transpose_cuda_naive(matrix_t<T> out, matrix_t<T> in) {
+void matrix_transpose_cuda_naive(const unsigned int block_size, matrix_t<T> out, const matrix_t<T> in) {
   #ifndef __CUDACC__
     // If the CUDA compiler is not used, fall back to OMP implementation.
     matrix_transpose_omp<T>(out, in);
   #else
-    // Invoke kernel
-    matrix_transpose_naive_kernel<float><<<  >>>(out, in, int m, int n);
+    // Set up and invoke kernel
+    unsigned int num_blocks_x, num_blocks_y;
+
+    num_blocks_x = ((in.width % block_size) == 0) ?
+                     in.width / block_size     :
+                     in.width / block_size + 1 ;
+
+    num_blocks_y = ((in.height % block_size) == 0) ?
+                     in.height / block_size     :
+                     in.height / block_size + 1 ;
+
+    dim3 blockDim(block_size, block_size);
+    dim3 gridDim(num_blocks_x, num_blocks_y);
+
+    matrix_transpose_naive_kernel<T><<< blockDim, gridDim >>>(out, in);
+    cudaThreadSynchronize();
   #endif
 }
 
 int main(int argc, char *argv[]) {
+
   return 0;
 }
