@@ -1,0 +1,97 @@
+% !TEX TS-program = pdflatex
+\documentclass[11pt,a4paper,english]{article}
+\usepackage[ansinew]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[obeyspaces, hyphens]{url}
+\usepackage[top=4cm, bottom=4cm, left=3cm, right=3cm]{geometry}
+\usepackage{enumerate}
+\usepackage{amsmath}
+\usepackage[pdftex]{graphicx}
+\usepackage{mdwlist}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{cite}
+\usepackage{amsmath}
+\usepackage{ulem}
+\usepackage{babel} 
+\usepackage{fancyvrb}
+\usepackage{verbatimbox}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{minted}
+\usepackage{color}
+\usepackage{csquotes}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{array}
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+	
+\newcommand*\justify{%
+  \fontdimen2\font=0.4em% interword space
+  \fontdimen3\font=0.2em% interword stretch
+  \fontdimen4\font=0.1em% interword shrink
+  \fontdimen7\font=0.1em% extra space
+  \hyphenchar\font=`\-% allowing hyphenation
+}
+
+\lstset{
+    frame=lrtb,
+    captionpos=b,
+    belowskip=0pt
+}
+
+\captionsetup[listing]{aboveskip=5pt,belowskip=\baselineskip}
+
+	
+%\definecolor{lightgray}{rgb}{0.95,0.95,0.95}
+%\renewcommand\listingscaption{Code}
+
+\newcommand{\concat}{\ensuremath{+\!\!\!\!+\!\!}}
+
+\pagestyle{fancy}
+\headheight 35pt
+
+\DefineVerbatimEnvironment{code}{Verbatim}{fontsize=\small}
+\DefineVerbatimEnvironment{example}{Verbatim}{fontsize=\small}
+\newcommand{\ignore}[1]{}
+
+\hyphenation{character-ised}
+
+\rhead{Assignment 3}
+\lhead{PMPH}
+\begin{document}
+
+\thispagestyle{empty} %fjerner sidetal 
+\hspace{6cm} \vspace{6cm}
+\begin{center}
+\textbf{\Huge {Programming Massively Parallel Hardware}}\\ \vspace{0.5cm}
+\Large{Assignment 3}
+\end{center}
+\vspace{3cm}
+\begin{center}
+\Large{\textbf{Viktor Hansen}}
+\end{center}
+\vspace{6.0cm}
+\thispagestyle{empty}
+
+\newpage
+
+\section*{Task 1 - Matrix Transposition}
+Due to data loss (Makefile deleting \texttt{.cu/.cu.h} files while invoking \texttt{make clean}), I have only managed to solve tasks 1a, 1b and 1c. I still need to make tests and benchmarks for the implemented functions. The solutions are implemented in the \texttt{code/task1} directory. To compile, invoke \texttt{make} from the \texttt{code/task1} directory.
+
+%\bibliographystyle{plain}
+%\bibliography{references}
+
+%\section*{Appendix A}
+%\subsection*{\path{src/commented-disassembly.txt}}
+%\inputminted{text}{src/commented-disassembly.txt}
+
+%\pagebreak
+
+%\subsection*{\path{src/exploit.c}}
+%\inputminted{c}{src/exploit.c}
+
+\end{document}
