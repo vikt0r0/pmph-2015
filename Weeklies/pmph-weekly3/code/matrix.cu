@@ -142,6 +142,64 @@ void matrix_transpose_cuda_tiled(matrix_t<T> out, const matrix_t<T> in) {
   #endif
 }
 
+template <typename T>
+void matrix_mult_seq(matrix_t<T> a, matrix_t<T> b, matrix_t<T> r) {
+  for (int i = 0; i < r.height; ++i) {
+    for (int j = 0; j < r.width; ++j) {
+      T res = 0;
+      for (int k = 0; k < a.width; ++k) {
+        res += a.elements[i * a.width + k] * b.elements[k * b.width + j];
+      }
+      r.elements[i * r.width + j] = res;
+    }
+  }
+}
+
+template <typename T>
+void matrix_mult_cuda_naive(const unsigned int block_size, matrix_t<T> a, matrix_t<T> b, matrix_t<T> r) {
+  #ifdef __CUDACC__
+  // Allocate and specify dimensions
+  unsigned int num_blocks_x, num_blocks_y;
+
+  num_blocks_x = ((r.width % block_size) == 0) ?
+                   r.width / block_size     :
+                   r.width / block_size + 1 ;
+
+  num_blocks_y = ((r.height % block_size) == 0) ?
+                   r.height / block_size     :
+                   r.height / block_size + 1 ;
+
+  dim3 blockDim(block_size, block_size);
+  dim3 gridDim(num_blocks_x, num_blocks_y);
+  // Invoke the kernel
+  matrix_mult_naive_kernel<<<gridDim, blockDim>>>(a,b,r);
+  cudaThreadSynchronize(); 
+  #endif
+}
+
+template <typename T>
+void matrix_mult_cuda_tiled(matrix_t<T> a, matrix_t<T> b, matrix_t<T> r) {
+  #ifdef __CUDACC__
+  unsigned int block_size = TILE_SIZE;
+  // Allocate and specify dimensions
+  unsigned int num_blocks_x, num_blocks_y;
+
+  num_blocks_x = ((r.width % block_size) == 0) ?
+                   r.width / block_size     :
+                   r.width / block_size + 1 ;
+
+  num_blocks_y = ((r.height % block_size) == 0) ?
+                   r.height / block_size     :
+                   r.height / block_size + 1 ;
+
+  dim3 blockDim(block_size, block_size);
+  dim3 gridDim(num_blocks_x, num_blocks_y);
+  // Invoke the kernel
+  matrix_mult_tiled_kernel<T, TILE_SIZE><<<gridDim, blockDim>>>(a,b,r);
+  cudaThreadSynchronize(); 
+  #endif
+}
+
 int timeval_subtract(struct timeval *result, struct timeval *t2, struct timeval *t1)
 {
     unsigned int resolution=1000000;
@@ -283,6 +341,133 @@ int main(int argc, char *argv[]) {
     printf("CUDA implementation (tiled) of transpose produced the CORRECT result in %lu microseconds!\n", elapsed);
   } else {
     printf("CUDA implementation (tiled) of transpose produced an INCORRECT result in %lu microseconds!\n", elapsed);
+  }
+  #else
+  printf("CUDA not supported by the current compiler... Skipping...\n");
+  #endif
+
+  // Create input matrix
+  matrix_t<float> m_in_2;
+  m_in_2.width = MATRIX_SIZE;
+  m_in_2.height = MATRIX_SIZE;
+  m_in_2.elements = (float*) malloc(m_in_2.width * m_in_2.height * sizeof(float));
+  matrix_fill_random_float(m_in_2,0.0,1000.0);
+
+  // Multiply using sequential implementation
+  matrix_t<float> m_mult_out_seq;
+  m_mult_out_seq.width  = m_in_2.width;
+  m_mult_out_seq.height = m_in.height;
+  m_mult_out_seq.elements = (float*) malloc(m_mult_out_seq.width * m_mult_out_seq.height * sizeof(float));
+  timer_start();
+  matrix_mult_seq<float>(m_in, m_in_2, m_mult_out_seq);
+  elapsed = timer_stop();
+  printf("Sequential implementation of multiply finished in %lu microseconds!\n", elapsed);
+  
+  // Multiply using naive CUDA implementation
+  #ifdef __CUDACC__
+  // Device structs
+  matrix_t<float> m_mult_out_cuda_naive, d_m_mult_out_cuda_naive, d_m_mult_in_cuda_naive, d_m_mult_in_2_cuda_naive;
+  d_m_mult_in_cuda_naive.width    = m_in.width;
+  d_m_mult_in_cuda_naive.height   = m_in.height;
+  d_m_mult_in_2_cuda_naive.width  = m_in_2.width;
+  d_m_mult_in_2_cuda_naive.height = m_in_2.height;
+  d_m_mult_out_cuda_naive.width   = m_in_2.width;
+  d_m_mult_out_cuda_naive.height  = m_in.height;
+  m_mult_out_cuda_naive.width    = m_in_2.width;
+  m_mult_out_cuda_naive.height   = m_in.height;
+  m_mult_out_cuda_naive.elements = (float*) malloc(
+    m_mult_out_cuda_naive.width * m_mult_out_cuda_naive.height * sizeof(float)
+  );
+  // Copy input array to device
+  cudaMalloc(
+    (void**) &(d_m_mult_in_cuda_naive.elements),
+    d_m_mult_in_cuda_naive.width * d_m_mult_in_cuda_naive.height * sizeof(float)
+  );
+  cudaMalloc(
+    (void**) &(d_m_mult_in_2_cuda_naive.elements),
+    d_m_mult_in_2_cuda_naive.width * d_m_mult_in_2_cuda_naive.height * sizeof(float)
+  );
+  cudaMalloc(
+    (void**) &(d_m_out_cuda_naive.elements),
+    d_m_out_cuda_naive.width * d_m_out_cuda_naive.height * sizeof(float)
+  );
+  cudaMemcpy(
+    d_m_in_cuda_naive.elements, m_in.elements,
+    d_m_in_cuda_naive.width * d_m_in_cuda_naive.height * sizeof(float),
+    cudaMemcpyHostToDevice
+  );
+  cudaMemcpy(
+    d_m_mult_in_2_cuda_naive.elements, m_in_2.elements,
+    d_m_mult_in_2_cuda_naive.width * d_m_mult_in_2_cuda_naive.height * sizeof(float),
+    cudaMemcpyHostToDevice
+  );
+  timer_start();
+  matrix_mult_cuda_naive<float>(512, d_m_mult_in_cuda_naive, d_m_mult_in_2_cuda_naive, d_m_mult_out_cuda_naive);
+  elapsed = timer_stop();
+  cudaMemcpy(
+    m_mult_out_cuda_naive.elements, d_m_mult_out_cuda_naive.elements,
+    d_m_mult_out_cuda_naive.width * d_m_mult_out_cuda_naive.height * sizeof(float),
+    cudaMemcpyDeviceToHost
+  );
+  if (matrix_is_equal(m_mult_out_seq, m_mult_out_cuda_naive)) {
+    printf("CUDA implementation (naive) of multiply produced the CORRECT result in %lu microseconds!\n", elapsed);
+  } else {
+    printf("CUDA implementation (naive) of multiply produced an INCORRECT result in %lu microseconds!\n", elapsed);
+  }
+  #else
+  printf("CUDA not supported by the current compiler... Skipping...\n");
+  #endif
+
+  // Multiply using tiled CUDA implementation
+  #ifdef __CUDACC__
+  // Device structs
+  matrix_t<float> m_mult_out_cuda_tiled, d_m_mult_out_cuda_tiled, d_m_mult_in_cuda_tiled, d_m_mult_in_2_cuda_tiled;
+  d_m_mult_in_cuda_tiled.width    = m_in.width;
+  d_m_mult_in_cuda_tiled.height   = m_in.height;
+  d_m_mult_in_2_cuda_tiled.width  = m_in_2.width;
+  d_m_mult_in_2_cuda_tiled.height = m_in_2.height;
+  d_m_mult_out_cuda_tiled.width   = m_in_2.width;
+  d_m_mult_out_cuda_tiled.height  = m_in.height;
+  m_mult_out_cuda_tiled.width    = m_in_2.width;
+  m_mult_out_cuda_tiled.height   = m_in.height;
+  m_mult_out_cuda_tiled.elements = (float*) malloc(
+    m_mult_out_cuda_tiled.width * m_mult_out_cuda_tiled.height * sizeof(float)
+  );
+  // Copy input array to device
+  cudaMalloc(
+    (void**) &(d_m_mult_in_cuda_tiled.elements),
+    d_m_mult_in_cuda_tiled.width * d_m_mult_in_cuda_tiled.height * sizeof(float)
+  );
+  cudaMalloc(
+    (void**) &(d_m_mult_in_2_cuda_tiled.elements),
+    d_m_mult_in_2_cuda_tiled.width * d_m_mult_in_2_cuda_tiled.height * sizeof(float)
+  );
+  cudaMalloc(
+    (void**) &(d_m_out_cuda_tiled.elements),
+    d_m_out_cuda_tiled.width * d_m_out_cuda_tiled.height * sizeof(float)
+  );
+  cudaMemcpy(
+    d_m_in_cuda_tiled.elements, m_in.elements,
+    d_m_in_cuda_tiled.width * d_m_in_cuda_tiled.height * sizeof(float),
+    cudaMemcpyHostToDevice
+  );
+  cudaMemcpy(
+    d_m_mult_in_2_cuda_tiled.elements, m_in_2.elements,
+    d_m_mult_in_2_cuda_tiled.width * d_m_mult_in_2_cuda_tiled.height * sizeof(float),
+    cudaMemcpyHostToDevice
+  );
+  timer_start();
+  matrix_mult_cuda_tiled<float>(d_m_mult_in_cuda_naive, d_m_mult_in_2_cuda_naive, d_m_mult_out_cuda_naive);
+  elapsed = timer_stop();
+  cudaMemcpy(
+    m_mult_out_cuda_tiled.elements, d_m_mult_out_cuda_tiled.elements,
+    d_m_mult_out_cuda_tiled.width * d_m_mult_out_cuda_tiled.height * sizeof(float),
+    cudaMemcpyDeviceToHost
+  );
+  if (matrix_is_equal(m_mult_out_seq, m_mult_out_cuda_tiled)) {
+    printf("CUDA implementation (tiled) of multiply produced the CORRECT result in %lu microseconds!\n", elapsed);
+  } else {
+    printf("CUDA implementation (tiled) of multiply produced an INCORRECT result in %lu microseconds!\n", elapsed);
   }
   #else
   printf("CUDA not supported by the current compiler... Skipping...\n");
