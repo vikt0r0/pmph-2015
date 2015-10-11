@@ -26,4 +26,27 @@ matrix_transpose_naive_kernel(matrix_t<T> d_out, matrix_t<T> d_in) {
   setElement<T>(d_out, x, y, e);
 }
 
+template <class T, unsigned int TILE_SIZE>
+__global__ void matrix_transpose_tiled_kernel(matrix_t<T> d_out, matrix_t<T> d_in) {
+  __shared__ float tile[TILE_SIZE][TILE_SIZE];
+
+  int j = blockIdx.x * TILE_SIZE + threadIdx.x;
+  int i = blockIdx.y * TILE_SIZE + threadIdx.y;
+
+  if( j >= d_in.width || i >= d_in.height )
+    return;
+
+  tile[threadIdx.y][threadIdx.x] = getElement(d_in, i, j);
+
+  __syncthreads();
+
+  i = blockIdx.y*TILE_SIZE + threadIdx.x;
+  j = blockIdx.x*TILE_SIZE + threadIdx.y;
+
+  if( j < d_in.width && i < d_in.height ) {
+    T elem = tile[threadIdx.x][threadIdx.y];
+    setElement(d_out, j, i, elem);
+  }
+ }
+
 #endif // _MATRIX_KERNELS

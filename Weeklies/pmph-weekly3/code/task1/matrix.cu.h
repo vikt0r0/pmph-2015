@@ -21,7 +21,7 @@ void matrix_transpose_omp(matrix_t<T> out, const matrix_t<T> in);
 template <typename T>
 void matrix_transpose_cuda_naive(const unsigned int block_size, matrix_t<T> out, const matrix_t<T> in);
 template <typename T>
-void matrix_transpose_cuda_tiled(const unsigned int block_size, matrix_t<T> out, const matrix_t<T> in);
+void matrix_transpose_cuda_tiled(matrix_t<T> out, const matrix_t<T> in);
 template <typename T>
 bool matrix_is_equal(matrix_t<T> a, matrix_t<T> b);
 
