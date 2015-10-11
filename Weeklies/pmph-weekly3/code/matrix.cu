@@ -9,7 +9,7 @@
 #include <cuda_runtime.h>
 #endif
 
-#define EPSILON 0.00001
+#define EPSILON 0.001
 #define MATRIX_SIZE 1024
 #define TILE_SIZE 32
 #define NUM_THREADS_BLOCK 8
