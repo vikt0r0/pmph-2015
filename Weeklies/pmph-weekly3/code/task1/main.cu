@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
   timer_start();
   matrix_transpose_seq(m_out_seq, m_in);
   elapsed = timer_stop();
-  printf("Sequential implementation of transpose took %lu microseconds!\n", elapsed);
+  printf("Sequential implementation of transpose finished in %lu microseconds!\n", elapsed);
   // Transpose using OMP implementation
   #if defined(_OPENMP)
   matrix_t<float> m_out_omp;
@@ -53,7 +53,11 @@ int main(int argc, char *argv[]) {
   timer_start();
   matrix_transpose_omp(m_out_omp, m_in);
   elapsed = timer_stop();
-  printf("OMP implementation of transpose took %lu microseconds!\n", elapsed);
+  if (matrix_is_equal(m_out_seq, m_out_omp)) {
+    printf("OMP implementation of transpose produced the CORRECT result in %lu microseconds!\n", elapsed);
+  } else {
+    printf("OMP implementation of transpose produced an INCORRECT result in %lu microseconds!\n", elapsed);
+  }
   #else
   printf("OMP not supported by the current compiler... Skipping...");
   #endif
@@ -87,12 +91,16 @@ int main(int argc, char *argv[]) {
   timer_start();
   matrix_transpose_cuda_naive(d_m_out_cuda_naive, d_m_in_cuda_naive);
   elapsed = timer_stop();
-  printf("CUDA implementation (naive) of transpose took %lu microseconds!\n", elapsed);
   cudaMemcpy(
     m_out_cuda_naive.elements, d_m_out_cuda_naive.elements,
     d_m_out_cuda_naive.width * d_m_out_cuda_naive.height * sizeof(float),
     cudaMemcpyDeviceToHost
   );
+  if (matrix_is_equal(m_out_seq, m_out_cuda_naive)) {
+    printf("CUDA implementation (naive) of transpose produced the CORRECT result in %lu microseconds!\n", elapsed);
+  } else {
+    printf("CUDA implementation (naive) of transpose produced an INCORRECT result in %lu microseconds!\n", elapsed);
+  }
   #else
   printf("CUDA not supported by the current compiler... Skipping...");
   #endif
