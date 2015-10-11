@@ -1,8 +1,6 @@
 #ifndef _MATRIX
 #define _MATRIX
 
-#define MATRIX_EQUALITY_EPSILON 0.00005
-
 template <class T>
 struct matrix_t {
   int height;
@@ -24,5 +22,9 @@ template <typename T>
 void matrix_transpose_cuda_naive(const unsigned int block_size, matrix_t<T> out, const matrix_t<T> in);
 template <typename T>
 void matrix_transpose_cuda_tiled(const unsigned int block_size, matrix_t<T> out, const matrix_t<T> in);
+template <typename T>
+bool matrix_is_equal(matrix_t<T> a, matrix_t<T> b);
+
+void matrix_fill_random_float(matrix_t<float> mat, float min, float max);
 
 #endif // _MATRIX

@@ -23,7 +23,7 @@ matrix_transpose_naive_kernel(matrix_t<T> d_out, matrix_t<T> d_in) {
     return;
 
   T e = getElement(d_in, y, x);
-  setElement(d_out, x, y);
+  setElement<T>(d_out, x, y, e);
 }
 
 #endif // _MATRIX_KERNELS
