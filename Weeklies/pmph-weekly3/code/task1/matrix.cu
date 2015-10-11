@@ -59,8 +59,7 @@ bool matrix_is_equal(matrix_t<float> a, matrix_t<float> b) {
   return equal;
 }
 
-template <typename T>
-void matrix_fill_random(matrix_t<T> mat, float min, float max) {
+void matrix_fill_random(matrix_t<float> mat, float min, float max) {
   for (int i = 0; i < mat.height; ++i)
     for (int j = 0; j < mat.width; ++j)
       matrix_set_element(mat, i, j, RAND_FLOAT(min,max));
@@ -110,9 +109,4 @@ void matrix_transpose_cuda_naive(const unsigned int block_size, matrix_t<T> out,
     matrix_transpose_naive_kernel<T><<< blockDim, gridDim >>>(out, in);
     cudaThreadSynchronize();
   #endif
-}
-
-int main(int argc, char *argv[]) {
-
-  return 0;
 }

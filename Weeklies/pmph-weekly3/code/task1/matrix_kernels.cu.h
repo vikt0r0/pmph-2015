@@ -1,5 +1,5 @@
-#ifndef MATRIX_KERNELS
-#define MATRIX_KERNELS
+#ifndef _MATRIX_KERNELS
+#define _MATRIX_KERNELS
 
 #include "matrix.cu.h"
 
@@ -26,4 +26,4 @@ matrix_transpose_naive_kernel(matrix_t<T> d_out, matrix_t<T> d_in) {
   setElement(d_out, x, y);
 }
 
-#endif
+#endif // _MATRIX_KERNELS
