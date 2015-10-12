@@ -19,11 +19,9 @@ matrix_transpose_naive_kernel(matrix_t<T> d_out, matrix_t<T> d_in) {
   const unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
   const unsigned int y = blockIdx.y*blockDim.y + threadIdx.y;
 
-  if (x >= d_in.width || y >= d_in.height)
-    return;
-
-  T e = getElement<T>(d_in, y, x);
-  setElement<T>(d_out, x, y, e);
+    T e = getElement<T>(d_in, x, y);
+    setElement<T>(d_out, x, y, e);
+  d_out.elements[x] = 0;
 }
 
 template <class T, unsigned int TILE_SIZE>
@@ -94,7 +92,7 @@ __global__ void matrix_mult_tiled_kernel(matrix_t<T> a, matrix_t<T> b, matrix_t<
     }
 
     if (i < r.height && j < r.width)
-        setElement(r, blockIdx.y * blockDim.y + threadIdx.y, blockIdx.x*blockDim.x+threadIdx.x, tmp));
+        setElement(r, blockIdx.y * blockDim.y + threadIdx.y, blockIdx.x*blockDim.x+threadIdx.x, tmp);
 }
 
 #endif // _MATRIX_KERNELS
