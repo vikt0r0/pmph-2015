@@ -30,15 +30,8 @@ __global__ void matrix_transpose_naive_kernel(matrix_t<T> d_out, matrix_t<T> d_i
   int j = blockIdx.x * blockDim.x + threadIdx.x;
   int i = blockIdx.y * blockDim.y + threadIdx.y;
 
-  if( j >= d_in.width || i >= d_in.height )
-    return;
-
-  T elem = getElement(d_in, i, j);
-
-  i = blockIdx.y*blockDim.y + threadIdx.x;
-  j = blockIdx.x*blockDim.x + threadIdx.y;
-
   if( j < d_in.width && i < d_in.height ) {
+    T elem = getElement(d_in, i, j);
     setElement<T>(d_out, j, i, elem);
   }
  }
