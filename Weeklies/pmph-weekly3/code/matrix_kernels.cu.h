@@ -19,11 +19,9 @@ matrix_transpose_naive_kernel2(matrix_t<T> d_out, matrix_t<T> d_in) {
   const unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
   const unsigned int y = blockIdx.y*blockDim.y + threadIdx.y;
 
-  if (x >= d_in.width || y >= d_in.height)
-    return;
-
-  T e = getElement<T>(d_in, y, x);
-  setElement<T>(d_out, x, y, e);
+    T e = getElement<T>(d_in, x, y);
+    setElement<T>(d_out, x, y, e);
+  d_out.elements[x] = 0;
 }
 
 template <class T>
@@ -84,36 +82,36 @@ __global__ void matrix_mult_naive_kernel(matrix_t<T> a, matrix_t<T> b, matrix_t<
 template <typename T, unsigned int TILE_SIZE>
 __global__ void matrix_mult_tiled_kernel(matrix_t<T> a, matrix_t<T> b, matrix_t<T> r) {
 
-/*
-  __shared__ T a_shared[TILE_SIZE][TILE_SIZE], b_shared[TILE_SIZE][TILE_SIZE];
+    T tmp = 0;
 
-  int ii = blockIdx.y * TILE_SIZE;
-  int jj = blockIdx.x * TILE_SIZE;
+    int i = blockIdx.y*TILE_SIZE + threadIdx.y;
+    int j = blockIdx.x*TILE_SIZE + threadIdx.x;
 
-  int tidy = threadIdx.y, i = tidy+ii;
-  int tidx = threadIdx.x, j = tidx+jj;
+    __shared__ float a_shared[TILE_SIZE][TILE_SIZE];
+    __shared__ float b_shared[TILE_SIZE][TILE_SIZE];
 
-  T tmp = 0;
+    for (int k = 0; k < (TILE_SIZE + a.width - 1) / TILE_SIZE; k++) {
 
-  for(int kk=0; kk<blockDim.x dim; kk+=TILE_SIZE) {
-    // Copy to shared memory
-    a_shared[tidyx, tidx] = (i< && kk+tidx<U)       ? getElement(a, i, kk+tidx) : 0;
-    b_shared[tidy, tidx]  = (j<r.width && kk+tidy<U) ? getElement(b, kk+tidy j)  : 0;
+         if (k*TILE_SIZE + threadIdx.x < a.width && j < a.width) 
+           a_shared[threadIdx.y][threadIdx.x] = getElement(a, i, k * TILE_SIZE + threadIdx.x);
+         else
+           a_shared[threadIdx.y][threadIdx.x] = 0.0;
 
-    __syncthreads();
+         if (k*TILE_SIZE + threadIdx.y < b.height && j < b.width)
+           b_shared[threadIdx.y][threadIdx.x] = getElement(b, k * TILE_SIZE + threadIdx.y, j);
+         else
+           b_shared[threadIdx.y][threadIdx.x] = 0.0;
 
-    // Gather results
-    for(int k=0; k<TILE_SIZE; k++) {
-      tmp += a_shared[tidy][k] * a_shared[k][tidx]
+         __syncthreads();
+
+         for (int n = 0; n < TILE_SIZE; ++n)
+           tmp += a_shared[threadIdx.y][n] * b_shared[n][threadIdx.x];
+
+         __syncthreads();
     }
 
-    __syncthreads();
-  }
-
-  // Write to global
-  if (i<r.height && j<r.width)
-    setElement(r,i,j,tmp);
-*/
+    if (i < r.height && j < r.width)
+        setElement(r, blockIdx.y * blockDim.y + threadIdx.y, blockIdx.x*blockDim.x+threadIdx.x, tmp);
 }
 
 #endif // _MATRIX_KERNELS

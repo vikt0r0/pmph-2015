@@ -9,8 +9,8 @@
 #include <cuda_runtime.h>
 #endif
 
-#define EPSILON 0.00001
-#define MATRIX_SIZE 1024
+#define EPSILON 0.001
+#define MATRIX_SIZE 16
 #define TILE_SIZE 32
 #define NUM_THREADS_BLOCK 8
 
@@ -45,6 +45,17 @@ bool matrix_is_equal(matrix_t<T> a, matrix_t<T> b) {
     }
   }
   return equal;
+}
+
+void print_matrix(matrix_t<float> m) {
+  int width = m.width;
+  int height = m.height;
+  for (int i=0; i < height; ++i) {
+    for (int j=0; j < width; ++j) {
+      printf("%06.3f\t", m.elements[i*width+j]);
+    }
+    printf("\n");
+  }
 }
 
 template <>
@@ -101,13 +112,8 @@ void matrix_transpose_cuda_naive(const unsigned int block_size, matrix_t<T> out,
     // Set up and invoke kernel
     unsigned int num_blocks_x, num_blocks_y;
 
-    num_blocks_x = ((in.width % block_size) == 0) ?
-                     in.width / block_size     :
-                     in.width / block_size + 1 ;
-
-    num_blocks_y = ((in.height % block_size) == 0) ?
-                     in.height / block_size     :
-                     in.height / block_size + 1 ;
+    num_blocks_x = (in.width  + block_size - 1) / block_size;
+    num_blocks_y = (in.height + block_size - 1) / block_size;
 
     dim3 blockDim(block_size, block_size);
     dim3 gridDim(num_blocks_x, num_blocks_y);
@@ -126,14 +132,9 @@ void matrix_transpose_cuda_tiled(matrix_t<T> out, const matrix_t<T> in) {
     // Set up and invoke kernel
     unsigned int num_blocks_x, num_blocks_y;
 
-    num_blocks_x = ((in.width % TILE_SIZE) == 0) ?
-                     in.width / TILE_SIZE     :
-                     in.width / TILE_SIZE + 1 ;
-
-    num_blocks_y = ((in.height % TILE_SIZE) == 0) ?
-                     in.height / TILE_SIZE     :
-                     in.height / TILE_SIZE + 1 ;
-
+    num_blocks_x = (in.width + TILE_SIZE  - 1) / TILE_SIZE;
+    num_blocks_y = (in.height + TILE_SIZE  - 1) / TILE_SIZE;
+ 
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
     dim3 gridDim(num_blocks_x, num_blocks_y);
 
@@ -228,7 +229,7 @@ int main(int argc, char *argv[]) {
   m_in.width = MATRIX_SIZE;
   m_in.height = MATRIX_SIZE;
   m_in.elements = (float*) malloc(m_in.width * m_in.height * sizeof(float));
-  matrix_fill_random_float(m_in,0.0,1000.0);
+  matrix_fill_random_float(m_in,0.0,10.0);
 
   // Transpose using sequential implementation
   matrix_t<float> m_out_seq;
@@ -254,6 +255,7 @@ int main(int argc, char *argv[]) {
   } else {
     printf("OMP implementation of transpose produced an INCORRECT result in %lu microseconds!\n", elapsed);
   }
+  free(m_out_omp.elements);
   #else
   printf("OMP not supported by the current compiler... Skipping...\n");
   #endif
@@ -282,22 +284,31 @@ int main(int argc, char *argv[]) {
   );
   cudaMemcpy(
     d_m_in_cuda_naive.elements, m_in.elements,
-    d_m_in_cuda_naive.width * d_m_in_cuda_naive.height * sizeof(float),
+    m_in.width * m_in.height * sizeof(float),
     cudaMemcpyHostToDevice
   );
   timer_start();
-  matrix_transpose_cuda_naive<float>(512,d_m_out_cuda_naive, d_m_in_cuda_naive);
+  matrix_transpose_cuda_naive<float>(512, d_m_out_cuda_naive, d_m_in_cuda_naive);
   elapsed = timer_stop();
   cudaMemcpy(
     m_out_cuda_naive.elements, d_m_out_cuda_naive.elements,
     d_m_out_cuda_naive.width * d_m_out_cuda_naive.height * sizeof(float),
     cudaMemcpyDeviceToHost
   );
+  printf("\nInput array:\n");
+  print_matrix(m_in);
+  printf("\nSequential output array:\n");
+  print_matrix(m_out_seq);
+  printf("\nCuda output array:\n");
+  print_matrix(m_out_cuda_naive);
   if (matrix_is_equal(m_out_seq, m_out_cuda_naive)) {
     printf("CUDA implementation (naive) of transpose produced the CORRECT result in %lu microseconds!\n", elapsed);
   } else {
     printf("CUDA implementation (naive) of transpose produced an INCORRECT result in %lu microseconds!\n", elapsed);
   }
+  cudaFree(d_m_in_cuda_naive.elements);
+  cudaFree(d_m_out_cuda_naive.elements);
+  free(m_out_cuda_naive.elements);
   #else
   printf("CUDA not supported by the current compiler... Skipping...\n");
   #endif
@@ -342,6 +353,9 @@ int main(int argc, char *argv[]) {
   } else {
     printf("CUDA implementation (tiled) of transpose produced an INCORRECT result in %lu microseconds!\n", elapsed);
   }
+  cudaFree(d_m_in_cuda_tiled.elements);
+  cudaFree(d_m_out_cuda_tiled.elements);
+  free(m_out_cuda_tiled.elements);
   #else
   printf("CUDA not supported by the current compiler... Skipping...\n");
   #endif
@@ -351,7 +365,7 @@ int main(int argc, char *argv[]) {
   m_in_2.width = MATRIX_SIZE;
   m_in_2.height = MATRIX_SIZE;
   m_in_2.elements = (float*) malloc(m_in_2.width * m_in_2.height * sizeof(float));
-  matrix_fill_random_float(m_in_2,0.0,1000.0);
+  matrix_fill_random_float(m_in_2,0.0,10.0);
 
   // Multiply using sequential implementation
   matrix_t<float> m_mult_out_seq;
@@ -457,7 +471,7 @@ int main(int argc, char *argv[]) {
     cudaMemcpyHostToDevice
   );
   timer_start();
-  matrix_mult_cuda_tiled<float>(d_m_mult_in_cuda_naive, d_m_mult_in_2_cuda_naive, d_m_mult_out_cuda_naive);
+  matrix_mult_cuda_tiled<float>(d_m_mult_in_cuda_tiled, d_m_mult_in_2_cuda_tiled, d_m_mult_out_cuda_tiled);
   elapsed = timer_stop();
   cudaMemcpy(
     m_mult_out_cuda_tiled.elements, d_m_mult_out_cuda_tiled.elements,
