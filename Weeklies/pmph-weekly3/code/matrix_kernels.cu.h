@@ -15,7 +15,7 @@ __device__ void setElement(matrix_t<T> mat, int i, int j, T val) {
 
 template <class T>
 __global__ void
-matrix_transpose_naive_kernel(matrix_t<T> d_out, matrix_t<T> d_in) {
+matrix_transpose_naive_kernel2(matrix_t<T> d_out, matrix_t<T> d_in) {
   const unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
   const unsigned int y = blockIdx.y*blockDim.y + threadIdx.y;
 
@@ -25,6 +25,25 @@ matrix_transpose_naive_kernel(matrix_t<T> d_out, matrix_t<T> d_in) {
   T e = getElement<T>(d_in, y, x);
   setElement<T>(d_out, x, y, e);
 }
+
+template <class T>
+__global__ void matrix_transpose_naive_kernel(matrix_t<T> d_out, matrix_t<T> d_in) {
+
+  int j = blockIdx.x * blockDim.x + threadIdx.x;
+  int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+  if( j >= d_in.width || i >= d_in.height )
+    return;
+
+  T elem = getElement(d_in, i, j);
+
+  i = blockIdx.y*blockDim.y + threadIdx.x;
+  j = blockIdx.x*blockDim.x + threadIdx.y;
+
+  if( j < d_in.width && i < d_in.height ) {
+    setElement<T>(d_out, j, i, elem);
+  }
+ }
 
 template <class T, unsigned int TILE_SIZE>
 __global__ void matrix_transpose_tiled_kernel(matrix_t<T> d_out, matrix_t<T> d_in) {
