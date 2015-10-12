@@ -5,3 +5,4 @@
 *.out
 *.synctex.gz
 _minted-*/
+Weeklies/pmph-weekly*/*.zip

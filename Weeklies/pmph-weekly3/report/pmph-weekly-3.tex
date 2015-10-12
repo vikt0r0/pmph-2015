@@ -80,7 +80,36 @@
 \newpage
 
 \section*{Task 1 - Matrix Transposition}
-Due to data loss (Makefile deleting \texttt{.cu/.cu.h} files while invoking \texttt{make clean}), I have only managed to solve tasks 1a, 1b and 1c. I still need to make tests and benchmarks for the implemented functions. The solutions are implemented in the \texttt{code/task1} directory. To compile, invoke \texttt{make} from the \texttt{code/task1} directory.
+The solutions are implemented in the \texttt{code/task1} directory. To compile and run the tests, invoke \texttt{make} followed by \texttt{make run} from the \texttt{code/task1} directory. The same is the case for the rest of the implemented exercises in this assignment.
+
+\section*{Task 2 - Usefulness of Matrix Transposition}
+\subsection*{2.a - Loop level parallelism}
+The outer loop is not parallel as the the \texttt{accum} is declared outside the loop and needs to be privatized to preserve the semantics. Rewriting the code yields:
+
+\captionsetup{justification=centering,margin=2cm}
+\begin{minted}{text}
+1. for i from 0 to N-1 // outer loop2.   accum[i] = A[i,0] * A[i,0];3.   B[i,0] = accum;4.   for j from 1 to 63 // inner loop5.     tmpA   = A[i, j];6.     accum  = sqrt(accum) + tmpA*tmpA;7.     B[i,j] = accum;
+\end{minted}
+\captionof{listing}{Code with \texttt{accum} privatized.\label{lst:sgmscanhost}}
+
+There are no loop-carried dependencies in the inner loops, and thus it can be parallelized. Expressing it in terms of parallel operators yields \texttt{scanInc (\textbackslash a e -> sqrt(a) + e*e) accum}. Rewriting line 6 as \texttt{accum = accum + tmpA*tmpA} means that the inner loop can be rewritten as a map/scan (or segmented scan) composition. The Haskell code for the inner loop would look like \texttt{scanInc (+) accum \$ map (\textbackslash x->x*x)}.
+
+
+\section*{Task 3 - Matrix Multiplication}
+\subsection*{3.a - Sequential Implementation}
+The sequential implementation is to be found in \texttt{code/matrix.cu}.
+
+
+\subsection*{3.b - OMP Implementation}
+Not implemented.
+
+\subsection*{3.c - Naive CUDA Implementation}
+Implemented in \texttt{code/matrix.cu}.
+
+\subsection*{3.d - Tiled CUDA Implementation}
+Attempted implementation of kernel in \texttt{code/matrix\_kernels.cu.h}, but I did not succeed. I attached code where I attempted to solve this about three weeks ago, attached in \texttt{code/matrixMult}. Unfortunately it only yields the correct results when the size of the matrix is a multiple of the block size. This can be run by invoking \texttt{make run} and running the generated binary.
+
+
 
 %\bibliographystyle{plain}
 %\bibliography{references}
