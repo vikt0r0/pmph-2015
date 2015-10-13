@@ -104,7 +104,7 @@ void matrix_transpose_omp(matrix_t<T> out, matrix_t<T> in) {
 }
 
 template <typename T>
-void matrix_transpose_cuda_naive(const unsigned int block_size, matrix_t<T> out, const matrix_t<T> in) {
+void matrix_transpose_cuda_naive(const unsigned int block_size2, matrix_t<T> out, const matrix_t<T> in) {
   #ifndef __CUDACC__
     // If the CUDA compiler is not used, fall back to OMP implementation.
     matrix_transpose_omp<T>(out, in);
@@ -112,13 +112,17 @@ void matrix_transpose_cuda_naive(const unsigned int block_size, matrix_t<T> out,
     // Set up and invoke kernel
     unsigned int num_blocks_x, num_blocks_y;
 
-    num_blocks_x = (in.width  + block_size - 1) / block_size;
-    num_blocks_y = (in.height + block_size - 1) / block_size;
+    int block_size = 512;
+
+    num_blocks_x = (in.width + block_size - 1) / block_size;
+    num_blocks_y = (in.height + block_size  - 1) / block_size;
+
+    printf("x: %d, y: %d\n",num_blocks_x, num_blocks_y);
 
     dim3 blockDim(block_size, block_size);
     dim3 gridDim(num_blocks_x, num_blocks_y);
 
-    matrix_transpose_naive_kernel<T><<< gridDim, blockDim >>>(out, in);
+    matrix_transpose_naive_kernel<T><<< blockDim, gridDim >>>(out, in);
     cudaThreadSynchronize();
   #endif
 }
@@ -138,7 +142,7 @@ void matrix_transpose_cuda_tiled(matrix_t<T> out, const matrix_t<T> in) {
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
     dim3 gridDim(num_blocks_x, num_blocks_y);
 
-    matrix_transpose_tiled_kernel<T, TILE_SIZE><<< gridDim, blockDim >>>(out, in);
+    matrix_transpose_tiled_kernel<T, TILE_SIZE><<< blockDim, gridDim >>>(out, in);
     cudaThreadSynchronize();
   #endif
 }
@@ -173,7 +177,7 @@ void matrix_mult_cuda_naive(const unsigned int block_size, matrix_t<T> a, matrix
   dim3 blockDim(block_size, block_size);
   dim3 gridDim(num_blocks_x, num_blocks_y);
   // Invoke the kernel
-  matrix_mult_naive_kernel<<<gridDim, blockDim>>>(a,b,r);
+  matrix_mult_naive_kernel<<<blockDim, gridDim>>>(a,b,r);
   cudaThreadSynchronize(); 
   #endif
 }
@@ -196,7 +200,7 @@ void matrix_mult_cuda_tiled(matrix_t<T> a, matrix_t<T> b, matrix_t<T> r) {
   dim3 blockDim(block_size, block_size);
   dim3 gridDim(num_blocks_x, num_blocks_y);
   // Invoke the kernel
-  matrix_mult_tiled_kernel<T, TILE_SIZE><<<gridDim, blockDim>>>(a,b,r);
+  matrix_mult_tiled_kernel<T, TILE_SIZE><<<blockDim, gridDim>>>(a,b,r);
   cudaThreadSynchronize(); 
   #endif
 }
@@ -259,55 +263,56 @@ void test_transpose_omp(matrix_t<float> m_in, matrix_t<float> m_out_seq) {
 }
 
 // Transpose using naive CUDA implementation
-void test_transpose_cuda_naive(matrix_t<float> m_in, matrix_t<float> m_out_seq) {
+void test_transpose_cuda_naive(matrix_t<float> in, matrix_t<float> m_out_seq) {
   #ifdef __CUDACC__
   unsigned long int elapsed;
   // Device structs
-  matrix_t<float> d_m_out_cuda_naive, d_m_in_cuda_naive, m_out_cuda_naive;
-  d_m_in_cuda_naive.width   = m_in.width;
-  d_m_in_cuda_naive.height  = m_in.height;
-  d_m_out_cuda_naive.width  = m_in.height;
-  d_m_out_cuda_naive.height = m_in.width;
-  m_out_cuda_naive.width    = m_in.height;
-  m_out_cuda_naive.height   = m_in.width;
-  m_out_cuda_naive.elements = (float*) malloc(
-    m_out_cuda_naive.width * m_out_cuda_naive.height * sizeof(float)
-  );
+  matrix_t<float> d_out, d_in, out;
+  d_out.height = out.height = d_in.width  = in.width;
+  d_out.width  = out.width  = d_in.height = in.height;
   // Copy input array to device
   cudaMalloc(
-    (void**) &(d_m_in_cuda_naive.elements),
-    d_m_in_cuda_naive.width * d_m_in_cuda_naive.height * sizeof(float)
+    (void**) &(d_out.elements),
+    d_out.width * d_out.height * sizeof(float)
   );
   cudaMalloc(
-    (void**) &(d_m_out_cuda_naive.elements),
-    d_m_out_cuda_naive.width * d_m_out_cuda_naive.height * sizeof(float)
+    (void**) &(d_in.elements),
+    d_in.width * d_in.height * sizeof(float)
   );
   cudaMemcpy(
-    d_m_in_cuda_naive.elements, m_in.elements,
-    m_in.width * m_in.height * sizeof(float),
+    d_in.elements, in.elements,
+    d_in.width * d_in.height * sizeof(float),
     cudaMemcpyHostToDevice
   );
+  out.elements = (float*) malloc(
+    out.width * out.height * sizeof(float)
+  );
   timer_start();
-  matrix_transpose_cuda_naive<float>(512, d_m_out_cuda_naive, d_m_in_cuda_naive);
+  matrix_transpose_cuda_naive<float>(512, d_out, d_in);
   elapsed = timer_stop();
   cudaMemcpy(
-    m_out_cuda_naive.elements, d_m_out_cuda_naive.elements,
-    d_m_out_cuda_naive.width * d_m_out_cuda_naive.height * sizeof(float),
+    out.elements, d_out.elements,
+    out.width * out.height * sizeof(float),
     cudaMemcpyDeviceToHost
   );
-  if (matrix_is_equal(m_out_seq, m_out_cuda_naive)) {
+  if (matrix_is_equal(out, m_out_seq)) {
     printf("CUDA implementation (naive) of transpose produced the CORRECT result in %lu microseconds!\n", elapsed);
   } else {
     printf("CUDA implementation (naive) of transpose produced an INCORRECT result in %lu microseconds!\n", elapsed);
   }
-  cudaFree(d_m_in_cuda_naive.elements);
-  cudaFree(d_m_out_cuda_naive.elements);
-  free(m_out_cuda_naive.elements);
+  printf("Matrix seq: \n");
+  /*
+  print_matrix(m_out_seq);
+  printf("Matrix out: \n");
+  print_matrix(out);
+  */
+  cudaFree(d_in.elements);
+  cudaFree(d_out.elements);
+  free(out.elements);
   #else
   printf("CUDA not supported by the current compiler... Skipping...\n");
   #endif
 }
-
 // Transpose using tiled CUDA implementation
 void test_transpose_cuda_tiled(matrix_t<float> in, matrix_t<float> m_out_seq) {
   #ifdef __CUDACC__
@@ -494,9 +499,9 @@ void test_mat_mult_cuda_tiled(matrix_t<float> a, matrix_t<float> b, matrix_t<flo
     cudaMemcpyDeviceToHost
   );
   if (matrix_is_equal(out, m_out_seq)) {
-    printf("CUDA implementation (naive) of multiply produced the CORRECT result in %lu microseconds!\n", elapsed);
+    printf("CUDA implementation (tiled) of multiply produced the CORRECT result in %lu microseconds!\n", elapsed);
   } else {
-    printf("CUDA implementation (naive) of multiply produced an INCORRECT result in %lu microseconds!\n", elapsed);
+    printf("CUDA implementation (tiled) of multiply produced an INCORRECT result in %lu microseconds!\n", elapsed);
   }
   cudaFree(d_in_0.elements);
   cudaFree(d_in_1.elements);
