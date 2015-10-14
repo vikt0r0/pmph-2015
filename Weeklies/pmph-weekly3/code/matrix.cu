@@ -118,7 +118,7 @@ void matrix_transpose_cuda_naive(const unsigned int block_size, matrix_t<T> out,
     dim3 blockDim(block_size, block_size);
     dim3 gridDim(num_blocks_x, num_blocks_y);
 
-    matrix_transpose_naive_kernel<T><<< gridDim, blockDim >>>(out, in);
+    matrix_transpose_naive_kernel<T><<< blockDim, gridDim >>>(out, in);
     cudaThreadSynchronize();
   #endif
 }
@@ -166,7 +166,6 @@ void matrix_mult_cuda_naive(const unsigned int block_size, matrix_t<T> a, matrix
 
   dim3 blockDim(block_size, block_size);
   dim3 gridDim(num_blocks_x, num_blocks_y);
-  printf("blockDim.x/.y=%d/%d, gridDim.x/.y=%d/%d\n", blockDim.x, blockDim.y, gridDim.x, gridDim.y);
   // Invoke the kernel
   matrix_mult_naive_kernel<<< gridDim, blockDim>>>(a,b,r);
   cudaThreadSynchronize(); 
@@ -545,6 +544,53 @@ matrix_t<float> sqrt_squared_sum_all_seq(matrix_t<float> a) {
   return b;
 }
 
+matrix_t<float> sqrt_squared_sum_omp(matrix_t<float> a) {
+  unsigned int elapsed;
+
+  matrix_t<float> b;
+  b = a;
+  b.elements = (float*) malloc(b.width * b.height * sizeof(float));
+
+  timer_start();
+  float accum[a.height];
+  #if defined(_OPENMP)
+  #pragma omp parallel for
+  #endif
+  for (int i = 0; i < a.height; ++i) {
+    accum[i] = matrix_get_element(a, i, 0) * matrix_get_element(a, i, 0);
+    matrix_set_element(b, i, 0, accum[i]);
+    for (int j = 1; j < b.width; ++j) {
+      float tmpA = matrix_get_element(a, i, j);
+      accum[i] = sqrt(accum[i]) + tmpA * tmpA;
+      matrix_set_element(b, i, j, accum[i]);
+    }
+  }
+
+  elapsed = timer_stop();
+  printf("OMP implementation of squareroot sums finished in %lu microseconds!\n", elapsed);
+
+  return b;
+}
+
+// Squareroot sums using OMP implementation
+void test_sqrt_squared_sum_omp(matrix_t<float> m_in, matrix_t<float> b_seq) {
+  #if defined(_OPENMP)
+  unsigned long int elapsed;
+  timer_start();
+  matrix_t<float> b_out_omp = sqrt_squared_sum_omp<float>(m_in);
+  elapsed = timer_stop();
+  if (matrix_is_equal(b_seq, b_out_omp)) {
+    printf("OMP implementation of squareroot-square-sums produced the CORRECT result in %lu microseconds!\n", elapsed);
+  } else {
+    printf("OMP implementation of squareroot-square-sums produced an INCORRECT result in %lu microseconds!\n", elapsed);
+  }
+  free(b_out_omp.elements);
+  #else
+  printf("OMP not supported by the current compiler... Skipping...\n");
+  #endif
+}
+
+
 void sqrt_squared_sum_cuda_naive(const unsigned int block_size, matrix_t<float> a, matrix_t<float> b) {
   #ifdef __CUDACC__
     // Set up and invoke kernel
@@ -683,6 +729,9 @@ void test_sqrt_squared_sum_all() {
   // Get output matrix
   matrix_t<float> b = sqrt_squared_sum_all_seq(a);  
 
+  // Test OMP implementation
+  test_sqrt_squared_sum_omp(a, b);
+  
   // Test naive CUDA implementation
   test_sqrt_squared_sum_cuda_naive(a, b);  
 
