@@ -9,10 +9,9 @@
 #include <cuda_runtime.h>
 #endif
 
-#define EPSILON 0.0001
+#define EPSILON 0.00001
 #define MATRIX_SIZE 1024
 #define TILE_SIZE 32
-#define NUM_THREADS_BLOCK 8
 
 #define RAND_FLOAT(min,max) (min + static_cast <float> (rand()) /(static_cast <float> (RAND_MAX/(max-min))))
 #define APPROX_EQUAL(a,b,epsilon) (fabs(a - b) <= ( (fabs(a) < fabs(b) ? fabs(b) : fabs(a)) * epsilon))
@@ -31,8 +30,9 @@ T matrix_get_element(matrix_t<T> mat, int i, int j) {
 
 template <typename T>
 bool matrix_is_equal(matrix_t<T> a, matrix_t<T> b) {
-  if (a.width != b.width || a.height != b.height)
+  if (a.width != b.width || a.height != b.height) {
     return false;
+  }
 
   bool equal = true;
 
@@ -40,7 +40,6 @@ bool matrix_is_equal(matrix_t<T> a, matrix_t<T> b) {
     for (int j = 0; j < a.width; ++j) {
       if (matrix_get_element(a,i,j) != matrix_get_element(b,i,j)) {
         equal = false;
-        break;
       }
     }
   }
@@ -60,8 +59,9 @@ void print_matrix(matrix_t<float> m) {
 
 template <>
 bool matrix_is_equal(matrix_t<float> a, matrix_t<float> b) {
-  if (a.width != b.width || a.height != b.height)
+  if (a.width != b.width || a.height != b.height) {
     return false;
+  }
 
   bool equal = true;
 
@@ -69,7 +69,7 @@ bool matrix_is_equal(matrix_t<float> a, matrix_t<float> b) {
     for (int j = 0; j < a.width; ++j) {
       if (!APPROX_EQUAL(matrix_get_element(a,i,j), matrix_get_element(b,i,j), EPSILON)) {
         equal = false;
-        break;
+        //printf("At i=%d, j=%d - Expected %f, got %f\n", i, j, matrix_get_element(a,i,j), matrix_get_element(b,i,j));
       }
     }
   }
@@ -104,7 +104,7 @@ void matrix_transpose_omp(matrix_t<T> out, matrix_t<T> in) {
 }
 
 template <typename T>
-void matrix_transpose_cuda_naive(const unsigned int block_size2, matrix_t<T> out, const matrix_t<T> in) {
+void matrix_transpose_cuda_naive(const unsigned int block_size, matrix_t<T> out, const matrix_t<T> in) {
   #ifndef __CUDACC__
     // If the CUDA compiler is not used, fall back to OMP implementation.
     matrix_transpose_omp<T>(out, in);
@@ -112,17 +112,13 @@ void matrix_transpose_cuda_naive(const unsigned int block_size2, matrix_t<T> out
     // Set up and invoke kernel
     unsigned int num_blocks_x, num_blocks_y;
 
-    int block_size = 512;
-
     num_blocks_x = (in.width + block_size - 1) / block_size;
     num_blocks_y = (in.height + block_size  - 1) / block_size;
-
-    printf("x: %d, y: %d\n",num_blocks_x, num_blocks_y);
 
     dim3 blockDim(block_size, block_size);
     dim3 gridDim(num_blocks_x, num_blocks_y);
 
-    matrix_transpose_naive_kernel<T><<< blockDim, gridDim >>>(out, in);
+    matrix_transpose_naive_kernel<T><<< gridDim, blockDim >>>(out, in);
     cudaThreadSynchronize();
   #endif
 }
@@ -142,7 +138,7 @@ void matrix_transpose_cuda_tiled(matrix_t<T> out, const matrix_t<T> in) {
     dim3 blockDim(TILE_SIZE, TILE_SIZE);
     dim3 gridDim(num_blocks_x, num_blocks_y);
 
-    matrix_transpose_tiled_kernel<T, TILE_SIZE><<< blockDim, gridDim >>>(out, in);
+    matrix_transpose_tiled_kernel<T, TILE_SIZE><<< gridDim, blockDim >>>(out, in);
     cudaThreadSynchronize();
   #endif
 }
@@ -165,19 +161,14 @@ void matrix_mult_cuda_naive(const unsigned int block_size, matrix_t<T> a, matrix
   #ifdef __CUDACC__
   // Allocate and specify dimensions
   unsigned int num_blocks_x, num_blocks_y;
-
-  num_blocks_x = ((r.width % block_size) == 0) ?
-                   r.width / block_size     :
-                   r.width / block_size + 1 ;
-
-  num_blocks_y = ((r.height % block_size) == 0) ?
-                   r.height / block_size     :
-                   r.height / block_size + 1 ;
+  num_blocks_x = (r.width + block_size - 1) / block_size;
+  num_blocks_y = (r.height + block_size  - 1) / block_size;
 
   dim3 blockDim(block_size, block_size);
   dim3 gridDim(num_blocks_x, num_blocks_y);
+  printf("blockDim.x/.y=%d/%d, gridDim.x/.y=%d/%d\n", blockDim.x, blockDim.y, gridDim.x, gridDim.y);
   // Invoke the kernel
-  matrix_mult_naive_kernel<<<blockDim, gridDim>>>(a,b,r);
+  matrix_mult_naive_kernel<<< gridDim, blockDim>>>(a,b,r);
   cudaThreadSynchronize(); 
   #endif
 }
@@ -188,19 +179,13 @@ void matrix_mult_cuda_tiled(matrix_t<T> a, matrix_t<T> b, matrix_t<T> r) {
   unsigned int block_size = TILE_SIZE;
   // Allocate and specify dimensions
   unsigned int num_blocks_x, num_blocks_y;
-
-  num_blocks_x = ((r.width % block_size) == 0) ?
-                   r.width / block_size     :
-                   r.width / block_size + 1 ;
-
-  num_blocks_y = ((r.height % block_size) == 0) ?
-                   r.height / block_size     :
-                   r.height / block_size + 1 ;
+  num_blocks_x = (r.width + TILE_SIZE - 1) / TILE_SIZE;
+  num_blocks_y = (r.height + TILE_SIZE  - 1) / TILE_SIZE;
 
   dim3 blockDim(block_size, block_size);
   dim3 gridDim(num_blocks_x, num_blocks_y);
   // Invoke the kernel
-  matrix_mult_tiled_kernel<T, TILE_SIZE><<<blockDim, gridDim>>>(a,b,r);
+  matrix_mult_tiled_kernel<T, TILE_SIZE><<< gridDim, blockDim >>>(a,b,r);
   cudaThreadSynchronize(); 
   #endif
 }
@@ -300,12 +285,6 @@ void test_transpose_cuda_naive(matrix_t<float> in, matrix_t<float> m_out_seq) {
   } else {
     printf("CUDA implementation (naive) of transpose produced an INCORRECT result in %lu microseconds!\n", elapsed);
   }
-  printf("Matrix seq: \n");
-  /*
-  print_matrix(m_out_seq);
-  printf("Matrix out: \n");
-  print_matrix(out);
-  */
   cudaFree(d_in.elements);
   cudaFree(d_out.elements);
   free(out.elements);
@@ -365,7 +344,7 @@ void test_transpose_all() {
   m_in.width = MATRIX_SIZE;
   m_in.height = MATRIX_SIZE;
   m_in.elements = (float*) malloc(m_in.width * m_in.height * sizeof(float));
-  matrix_fill_random_float(m_in,0.0,10.0);
+  matrix_fill_random_float(m_in,10.0,10.0);
 
   // Get output matrix
   matrix_t<float> m_out_seq = test_transpose_seq(m_in);  
@@ -518,7 +497,7 @@ void test_multiply_all() {
   m_in_0.width = MATRIX_SIZE;
   m_in_0.height = MATRIX_SIZE;
   m_in_0.elements = (float*) malloc(m_in_0.width * m_in_0.height * sizeof(float));
-  matrix_fill_random_float(m_in_0,0.0,10.0);
+   matrix_fill_random_float(m_in_0,0.0,10.0);
 
   matrix_t<float> m_in_1;
   m_in_1.width = MATRIX_SIZE;
@@ -540,8 +519,185 @@ void test_multiply_all() {
   free(m_out_seq.elements);
 }
 
+
+matrix_t<float> sqrt_squared_sum_all_seq(matrix_t<float> a) {
+  unsigned int elapsed;
+
+  matrix_t<float> b;
+  b = a;
+  b.elements = (float*) malloc(b.width * b.height * sizeof(float));
+
+  timer_start();
+  float accum;
+  for (int i = 0; i < a.height; ++i) {
+    accum = matrix_get_element(a, i, 0) * matrix_get_element(a, i, 0);
+    matrix_set_element(b, i, 0, accum);
+    for (int j = 1; j < b.width; ++j) {
+      float tmpA = matrix_get_element(a, i, j);
+      accum = sqrt(accum) + tmpA * tmpA;
+      matrix_set_element(b, i, j, accum);
+    }
+  }
+
+  elapsed = timer_stop();
+  printf("Sequential implementation of squareroot sums finished in %lu microseconds!\n", elapsed);
+
+  return b;
+}
+
+void sqrt_squared_sum_cuda_naive(const unsigned int block_size, matrix_t<float> a, matrix_t<float> b) {
+  #ifdef __CUDACC__
+    // Set up and invoke kernel
+    unsigned int num_blocks;
+
+    num_blocks = (a.height + block_size - 1) / block_size;
+
+    sqrt_squared_sum_naive_kernel<<< num_blocks, block_size >>>(a, b);
+    cudaThreadSynchronize();
+  #endif
+}
+
+void sqrt_squared_sum_cuda_coalesced(const unsigned int block_size, matrix_t<float> a, matrix_t<float> b) {
+  #ifdef __CUDACC__
+    // Set up and invoke kernel
+    unsigned int num_blocks;
+
+    num_blocks = (a.height + block_size - 1) / block_size;
+ 
+    sqrt_squared_sum_coalesced_kernel<<< num_blocks, block_size >>>(a, b);
+    cudaThreadSynchronize();
+  #endif
+}
+
+void test_sqrt_squared_sum_cuda_naive(matrix_t<float> a, matrix_t<float> b) {
+  #ifdef __CUDACC__
+  unsigned long elapsed;
+  // Device structs
+  matrix_t<float> d_a, d_b, b_out;
+  d_a = a;
+  d_b = b_out = b;
+  // Copy input array to device
+  cudaMalloc(
+    (void**) &(d_a.elements),
+    d_a.width * d_a.height * sizeof(float)
+  );
+  cudaMemcpy(
+    d_a.elements, a.elements,
+    d_a.width * d_a.height * sizeof(float),
+    cudaMemcpyHostToDevice
+  );
+  cudaMalloc(
+    (void**) &(d_b.elements),
+    d_b.width * d_b.height * sizeof(float)
+  );
+  b_out.elements = (float*) malloc(
+    b_out.width * b_out.height * sizeof(float)
+  );
+  timer_start();
+  sqrt_squared_sum_cuda_naive(512, d_a, d_b);
+  elapsed = timer_stop();
+  cudaMemcpy(
+    b_out.elements, d_b.elements,
+    b_out.width * b_out.height * sizeof(float),
+    cudaMemcpyDeviceToHost
+  );
+  if (matrix_is_equal(b_out, b)) {
+    printf("CUDA implementation (naive) of squareroot sums produced the CORRECT result in %lu microseconds!\n", elapsed);
+  } else {
+    printf("CUDA implementation (naive) of squareroot sums produced an INCORRECT result in %lu microseconds!\n", elapsed);
+  }
+  cudaFree(d_b.elements);
+  cudaFree(d_a.elements);
+  free(b_out.elements);
+  #else
+  printf("CUDA not supported by the current compiler... Skipping...\n");
+  #endif
+}
+
+void test_sqrt_squared_sum_cuda_coalesced(matrix_t<float> a, matrix_t<float> b) {
+  #ifdef __CUDACC__
+  unsigned long elapsed;
+  // Device structs
+  matrix_t<float> d_a, d_aT, d_b, d_bT, b_out;
+  d_a = a;
+  d_b = b_out = b;
+  d_aT.width = d_a.height;
+  d_aT.height = d_a.width;
+  d_bT.width = d_b.height;
+  d_bT.height = d_b.width;
+  // Copy input array to device
+  cudaMalloc(
+    (void**) &(d_a.elements),
+    d_a.width * d_a.height * sizeof(float)
+  );
+  cudaMalloc(
+    (void**) &(d_aT.elements),
+    d_aT.width * d_aT.height * sizeof(float)
+  );
+  cudaMemcpy(
+    d_a.elements, a.elements,
+    d_a.width * d_a.height * sizeof(float),
+    cudaMemcpyHostToDevice
+  );
+  cudaMalloc(
+    (void**) &(d_b.elements),
+    d_b.width * d_b.height * sizeof(float)
+  );
+  cudaMalloc(
+    (void**) &(d_bT.elements),
+    d_bT.width * d_bT.height * sizeof(float)
+  );
+  b_out.elements = (float*) malloc(
+    b_out.width * b_out.height * sizeof(float)
+  );
+  timer_start();
+  matrix_transpose_cuda_tiled<float>(d_aT, d_a);
+  sqrt_squared_sum_cuda_coalesced(512, d_aT, d_bT);
+  matrix_transpose_cuda_tiled<float>(d_b, d_bT);
+  elapsed = timer_stop();
+  cudaMemcpy(
+    b_out.elements, d_b.elements,
+    b_out.width * b_out.height * sizeof(float),
+    cudaMemcpyDeviceToHost
+  );
+  if (matrix_is_equal(b_out, b)) {
+    printf("CUDA implementation (naive) of squareroot sums produced the CORRECT result in %lu microseconds!\n", elapsed);
+  } else {
+    printf("CUDA implementation (naive) of squareroot sums produced an INCORRECT result in %lu microseconds!\n", elapsed);
+  }
+  cudaFree(d_b.elements);
+  cudaFree(d_a.elements);
+  free(b_out.elements);
+  #else
+  printf("CUDA not supported by the current compiler... Skipping...\n");
+  #endif
+}
+void test_sqrt_squared_sum_all() {
+  // Create input matrices
+  matrix_t<float> a;
+  a.width = 64;
+  a.height = MATRIX_SIZE;
+  a.elements = (float*) malloc(a.width * a.height * sizeof(float));
+  matrix_fill_random_float(a,1.0,1.0);
+
+  // Get output matrix
+  matrix_t<float> b = sqrt_squared_sum_all_seq(a);  
+
+  // Test naive CUDA implementation
+  test_sqrt_squared_sum_cuda_naive(a, b);  
+
+  // Test tiled CUDA implementation
+  test_sqrt_squared_sum_cuda_coalesced(a, b);  
+
+
+  free(a.elements);
+  free(b.elements);
+}
+
+
 int main(int argc, char *argv[]) {
   test_transpose_all();
+  test_sqrt_squared_sum_all();
   test_multiply_all();
   return 0;
 }

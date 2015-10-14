@@ -18,10 +18,11 @@ __global__ void matrix_transpose_naive_kernel(matrix_t<T> d_out, matrix_t<T> d_i
   int j = blockIdx.x * blockDim.x + threadIdx.x;
   int i = blockIdx.y * blockDim.y + threadIdx.y;
 
-  if( j < d_in.width && i < d_in.height ) {
-    T elem = getElement(d_in, i, j);
-    setElement(d_out, j, i, elem);
-  }
+  if( j >= d_in.width || i >= d_in.height )
+    return;
+
+  T elem = getElement(d_in, i, j);
+  setElement(d_out, j, i, elem);
  }
 
 template <class T, unsigned int TILE_SIZE>
@@ -49,14 +50,14 @@ __global__ void matrix_transpose_tiled_kernel(matrix_t<T> d_out, matrix_t<T> d_i
 
 template <class T>
 __global__ void matrix_mult_naive_kernel(matrix_t<T> a, matrix_t<T> b, matrix_t<T> r) {
-  const unsigned int col = blockDim.x * blockIdx.x + threadIdx.x;
-  const unsigned int row = blockDim.y * blockIdx.y + threadIdx.y;
-  T res = 0;
+  const unsigned int j = blockDim.x * blockIdx.x + threadIdx.x;
+  const unsigned int i = blockDim.y * blockIdx.y + threadIdx.y;
+  T res = 0.0;
   // Check if we are within bounds
-  if (col < r.width && row < r.height) {
-    for (int i = 0; i < a.width; ++i)
-      res += getElement<T>(a, row, i) * getElement<T>(b, i, col);
-    setElement<T>(r, row, col, res);
+  if (j < r.width && i < r.height) {
+    for (int k = 0; k < a.width; ++k)
+      res += getElement<T>(a, i, k) * getElement<T>(b, k, j);
+    setElement<T>(r, i, j, res);
   }
 }
 
@@ -73,7 +74,7 @@ __global__ void matrix_mult_tiled_kernel(matrix_t<T> a, matrix_t<T> b, matrix_t<
 
     for (int k = 0; k < (TILE_SIZE + a.width - 1) / TILE_SIZE; k++) {
 
-         if (k*TILE_SIZE + threadIdx.x < a.width && j < a.width) 
+         if (k*TILE_SIZE + threadIdx.x < a.width && i < a.height) 
            a_shared[threadIdx.y][threadIdx.x] = getElement(a, i, k * TILE_SIZE + threadIdx.x);
          else
            a_shared[threadIdx.y][threadIdx.x] = 0.0;
@@ -92,7 +93,37 @@ __global__ void matrix_mult_tiled_kernel(matrix_t<T> a, matrix_t<T> b, matrix_t<
     }
 
     if (i < r.height && j < r.width)
-        setElement(r, blockIdx.y * blockDim.y + threadIdx.y, blockIdx.x*blockDim.x+threadIdx.x, tmp);
+        setElement(r, i, j, tmp);
+}
+
+__global__ void sqrt_squared_sum_naive_kernel(matrix_t<float> a, matrix_t<float> b) {
+  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
+
+  float accum = getElement(a, i, 0) * getElement(a, i, 0);
+  setElement<float>(b, i, 0, accum);
+
+  if (i < a.height) {
+    for (int j = 1; j < b.width; ++j) {
+      float tmpA = getElement(a, i, j);
+      accum = sqrtf(accum) + tmpA*tmpA;
+      setElement(b, i, j, accum); 
+    }
+  }
+}
+
+__global__ void sqrt_squared_sum_coalesced_kernel(matrix_t<float> a, matrix_t<float> b) {
+  const unsigned int i = blockDim.x * blockIdx.x + threadIdx.x;
+
+  float accum = getElement(a, 0, i) * getElement(a, 0, i);
+  setElement<float>(b, 0, i, accum);
+
+  if (i < a.width) {
+    for (int j = 1; j < b.height; ++j) {
+      float tmpA = getElement(a, j, i);
+      accum = sqrtf(accum) + tmpA*tmpA;
+      setElement(b, j, i, accum); 
+    }
+  }
 }
 
 #endif // _MATRIX_KERNELS
